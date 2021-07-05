@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
+
+    "github.com/fuwu-yuan/gameserver-go/net_io"
 )
 
 const (
     CONN_TYPE = "tcp"
+    EXT = 3
     EOT = 4
 )
 
@@ -33,13 +35,13 @@ func main() {
     fmt.Printf("Connecting to %s:%s\n", serverAddr, serverPort)
     tcpAddr, err := net.ResolveTCPAddr(CONN_TYPE, serverAddr + ":" + serverPort)
     if err != nil {
-        println("ResolveTCPAddr failed:", err.Error())
+        fmt.Println("ResolveTCPAddr failed:", err.Error())
         os.Exit(1)
     }
     // Initiating connection
     conn, err := net.DialTCP(CONN_TYPE, nil, tcpAddr)
     if err != nil {
-        println("Dial failed:", err.Error())
+        fmt.Println("Dial failed:", err.Error())
         os.Exit(1)
     }
 
@@ -47,68 +49,37 @@ func main() {
     reader := bufio.NewReader(os.Stdin)
     for {
         rawLine, _ := reader.ReadString('\n')
-        writeData := normalizeWriteData(rawLine)
+        writeData := net_io.NormalizeWriteData(rawLine)
         _, err = conn.Write(writeData)
         if err != nil {
-            println("Write to server failed:", err.Error())
+            fmt.Println("Write to server failed:", err.Error())
             os.Exit(1)
         }
 
-        // Read server response
-        readData, err := bufio.NewReader(conn).ReadString(EOT)
+        // Read server response until ETX (End of text)
+        readData, err := bufio.NewReader(conn).ReadString(EXT)
         if err != nil {
-            fmt.Println("Error: ", err.Error())
+            fmt.Println("Error read: ", err.Error())
             return
         }
 
-        // Print message received
-        reply := normalizeReadData(readData)
-        fmt.Printf(">> %s\n", reply)
+        reply := net_io.NormalizeReadData(readData)
 
-        // Handle disconnect if a "DISCONNECT" is received
-        if reply == DISCONNECT + ":" + ACK {
-            fmt.Println("Received disconnect acknowledge, closing connection ...")
+        // Handle disconnect if the first byte of a packet is EOT
+        if len(reply) > 0 && []byte(reply)[0] == EOT {
+            sendEotPacket(conn)
+            fmt.Println("Received a disconnect, closing connection ...") // DEBUG
             break
+        } else {
+            // Print & interpret data
+            fmt.Printf(">> %s\n", reply)
         }
-
-        // Interpret data
     }
     conn.Close()
     fmt.Printf("Connection to %s:%s closed", serverAddr, serverPort)
 }
 
-func normalizeWriteData(writeData string) []byte {
-    // Build the line with EOT as the last byte
-
-    // Removes '\n'
-    res := strings.ReplaceAll(writeData, "\n", "")
-
-    // Init a slice with len + 1 for EOT
-    slice := make([]byte, 0, len(res) + 1)
-
-    // Append line into slice
-    slice = append(slice, res...)
-
-    // Add EOT at the end of slice
-    slice = append(slice, EOT)
-
-    return slice
-}
-
-func normalizeReadData(readData string) string {
-    // Build the read data without EOT as the last byte
-
-    // Get the lenght of the read data
-    lenData := len(readData)
-
-    // Init a slice with juste enough space for the actual data whithout any '\n' or EOT
-    slice := make([]byte, 0, lenData)
-
-    // Append the data with EOT
-    slice = append(slice, readData...)
-
-    // Remove the last byte (EOT)
-    slice = append(slice[:lenData - 1], slice[lenData:]...)
-
-    return string(slice)
+func sendEotPacket(conn net.Conn) {
+    eotPacket := string(append(make([]byte, 0, 1), EOT))
+    conn.Write(net_io.NormalizeWriteData(eotPacket))
 }
