@@ -1,23 +1,24 @@
 # Makefile for go app
 # author: julien-beguier
+GSSERVER=	gs-server
+GSCLIENT=	gs-client
 
-SRCSERVER=	cmd/gs-server
-SRCCLIENT=	cmd/gs-client
+SRCSERVER=	src/$(GSSERVER)
+SRCCLIENT=	src/$(GSCLIENT)
 BIN=		bin
 
 GOBUILD=	go build
 RM=		rm -f
-GSSERVER=	gs-server
-GSCLIENT=	gs-client
 
 all: server client
 
 server:
-	$(GOBUILD) -o $(BIN)/$(GSSERVER) $(SRCSERVER)/server.go
+	$(GOBUILD) -o $(BIN)/$(GSSERVER) $(SRCSERVER)/main.go
 	@echo "\n\033[1;31mBuild $(GSSERVER) complete\033[0;0m\n"
 
 client:
-	$(GOBUILD) -o $(BIN)/$(GSCLIENT) $(SRCCLIENT)/client.go
+#	$(GOBUILD) -o $(BIN)/$(GSCLIENT) $(SRCCLIENT)/main.go
+	$(GOBUILD) -o $(BIN)/$(GSCLIENT) $(SRCCLIENT)/client/client.go
 	@echo "\n\033[1;31mBuild $(GSCLIENT) complete\033[0;0m\n"
 
 fclean:
