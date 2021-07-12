@@ -7,6 +7,7 @@ import (
 
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/config"
 	"github.com/fuwu-yuan/gameserver-go/src/netfmt"
+	"github.com/fuwu-yuan/gameserver-go/src/netutils"
 )
 
 const (
@@ -15,38 +16,44 @@ const (
 )
 
 type Sclient struct {
-	Id     string
-	Socket net.Conn
+	Id          string
+	Socket      net.Conn
+	RemoteAddr  net.Addr
+	IsConnected bool
 }
 
-func readLoop(reader *bufio.Reader, rChan chan string, sSettings *config.ServerSettings) {
-	for sSettings.SignalToStop == false {
+func readLoop(client *Sclient, rChan chan string, sSettings *config.ServerSettings) {
+	reader := bufio.NewReader(client.Socket)
+
+	for sSettings.SignalToStop == false && client.IsConnected == true {
 		// Read data until ETX (End of text)
 		readData, err := reader.ReadString(EXT)
 		if err != nil {
+			// TODO Error on read: EOF -> client ctrl-Ced
 			fmt.Println("Error on read: ", err.Error())
-			return
+			client.IsConnected = false
+			break
 		}
 
 		data := netfmt.Input(readData)
 		rChan <- data
 	}
+	fmt.Println("Readloop end")
 }
 
 // Loops for each new connection
-func HandleConnection(client Sclient, sSettings *config.ServerSettings) {
+func Run(client Sclient, sSettings *config.ServerSettings) {
 	var nCurrentPlayers *uint32 = &sSettings.NCurrentPlayers
-	fmt.Printf("Client (%d) connected %s\n", *nCurrentPlayers, client.Socket.RemoteAddr())
+	fmt.Printf("Client (%s) connected %s\n", client.Id, client.Socket.RemoteAddr())
 
-	reader := bufio.NewReader(client.Socket)
 	rChan := make(chan string, 1)
 	defer close(rChan)
 
 	// Read loop
-	go readLoop(reader, rChan, sSettings)
+	go readLoop(&client, rChan, sSettings)
 
 	// Interpret data and write loop
-	for sSettings.SignalToStop == false {
+	for sSettings.SignalToStop == false && client.IsConnected == true {
 		if len(rChan) > 0 {
 			data := <-rChan
 
@@ -56,32 +63,34 @@ func HandleConnection(client Sclient, sSettings *config.ServerSettings) {
 				break
 			} else {
 				// Print & interpret data
-				fmt.Printf(">> %s\n", data) // DEBUG
-				interpretData(client.Socket, data)
+				fmt.Printf("[%s] >> %s\n", client.RemoteAddr, data) // DEBUG
+				interpretData(client, data)
 			}
 		}
 	}
-	// Close connection when out of the read loop
+	// If out of the loop, acknowledge disconnection by sending EOT
+	netutils.SendEotPacket(client.Socket)
+	// Then close connection
 	client.Socket.Close()
-	fmt.Printf("Client (%d) disconnected %s\n", *nCurrentPlayers, client.Socket.RemoteAddr())
+	fmt.Printf("Client (%s) disconnected %s\n", client.Id, client.Socket.RemoteAddr())
 	// Decrease number of connected clients
 	*nCurrentPlayers--
 }
 
-func interpretData(conn net.Conn, data string) {
+func interpretData(c Sclient, data string) {
 	// TODO implement protocol
 	if data == "ping" {
-		sendToClient(conn, "pong")
+		sendToClient(c, "pong")
 	} else {
-		sendToClient(conn, data)
+		sendToClient(c, data)
 	}
 }
 
-func sendToClient(conn net.Conn, rawData string) {
+func sendToClient(c Sclient, rawData string) {
 	// Build the response with EXT as the last byte
 	data := netfmt.Output(rawData)
 
 	// Send response to client
-	conn.Write(data)
-	fmt.Printf("<< %s\n", rawData) // DEBUG
+	c.Socket.Write(data)
+	fmt.Printf("[%s] << %s\n", c.RemoteAddr, rawData) // DEBUG
 }

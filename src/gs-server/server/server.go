@@ -7,14 +7,9 @@ import (
 
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/config"
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/sclient"
-	"github.com/fuwu-yuan/gameserver-go/src/netfmt"
 )
 
-const (
-	CONN_TYPE = "tcp"
-	EXT       = 3
-	EOT       = 4
-)
+const CONN_TYPE = "tcp"
 
 var clients = make(map[uint32]sclient.Sclient)
 
@@ -41,37 +36,15 @@ func StartListen(settings *config.ServerSettings) {
 			os.Exit(1)
 		}
 
-		// Add conn to a map containing all connected clients
-		client := sclient.Sclient{fmt.Sprint(settings.NCurrentPlayers), conn}
-		clients[settings.NCurrentPlayers] = client
-
 		// Increase number of connected clients
 		settings.NCurrentPlayers++
+
+		// Add conn to a map containing all connected clients
+		// FIXME Change client.Id must be a unique generated ID
+		client := sclient.Sclient{Id: fmt.Sprint(settings.NCurrentPlayers), Socket: conn, RemoteAddr: conn.RemoteAddr(), IsConnected: true}
+		clients[settings.NCurrentPlayers] = client
+
 		// Handle connections in a new goroutine
-		go sclient.HandleConnection(client, settings) // TODO sclient.Sclient.Run()
+		go sclient.Run(client, settings) // TODO client.Run()
 	}
-
-	// Disconnect all clients
-	disconnectAllClients(clients)
-}
-
-func disconnectAllClients(clients map[uint32]sclient.Sclient) {
-	var nbClient uint32 = uint32(len(clients))
-	for i := nbClient; i > 0; i-- {
-		client := clients[i]
-		// If this is the "disconnect" connection from self, do not write to its socket
-		// because the connection is already closed
-		if i != nbClient {
-			// Write EOT to all clients to end the read loop which contains net.Conn.Close()
-			// This will trigger the end of the read loop
-			SendEotPacket(client.Socket)
-		}
-		// Connection is closed in the read loop
-	}
-}
-
-// Close the connection
-func SendEotPacket(conn net.Conn) {
-	eotPacket := string(append(make([]byte, 0, 1), EOT))
-	conn.Write(netfmt.Output(eotPacket))
 }

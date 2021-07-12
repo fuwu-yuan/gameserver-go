@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/fuwu-yuan/gameserver-go/src/netfmt"
+	"github.com/fuwu-yuan/gameserver-go/src/netutils"
 )
 
 const (
@@ -67,7 +68,7 @@ func main() {
 
 		// Handle disconnect if the first byte of a packet is EOT
 		if len(reply) > 0 && []byte(reply)[0] == EOT {
-			sendEotPacket(conn)
+			netutils.SendEotPacket(conn)
 			fmt.Println("Received a disconnect, closing connection ...") // DEBUG
 			break
 		} else {
@@ -77,9 +78,4 @@ func main() {
 	}
 	conn.Close()
 	fmt.Printf("Connection to %s:%s closed", serverAddr, serverPort)
-}
-
-func sendEotPacket(conn net.Conn) {
-	eotPacket := string(append(make([]byte, 0, 1), EOT))
-	conn.Write(netfmt.Output(eotPacket))
 }

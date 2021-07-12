@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/config"
-	"github.com/fuwu-yuan/gameserver-go/src/gs-server/server"
+	"github.com/fuwu-yuan/gameserver-go/src/netutils"
 )
 
 const (
@@ -32,7 +32,7 @@ func HandleSignals(sSettings *config.ServerSettings) {
 			// Trigger a connection on self to "trigger" the accept()
 			tcpAddr, _ := net.ResolveTCPAddr(CONN_TYPE, LOCALHOST+":"+fmt.Sprint(sSettings.ServerPort))
 			conn, _ := net.DialTCP(CONN_TYPE, nil, tcpAddr)
-			server.SendEotPacket(conn)
+			netutils.SendEotPacket(conn)
 			time.Sleep(1 * time.Second)
 			conn.Close()
 		}

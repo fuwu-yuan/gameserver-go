@@ -4,9 +4,7 @@ import (
 	"strings"
 )
 
-const (
-	EXT = 3
-)
+const EXT = 3
 
 // Output builds the write data with EXT as the last byte
 func Output(writeData string) []byte {
