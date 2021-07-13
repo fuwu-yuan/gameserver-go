@@ -29,8 +29,7 @@ func readLoop(client *Sclient, rChan chan string, sSettings *config.ServerSettin
 		// Read data until ETX (End of text)
 		readData, err := reader.ReadString(EXT)
 		if err != nil {
-			// TODO Error on read: EOF -> client ctrl-Ced
-			fmt.Println("Error on read: ", err.Error())
+			// Error on read: EOF -> client ctrl-Ced
 			client.IsConnected = false
 			break
 		}
@@ -38,13 +37,12 @@ func readLoop(client *Sclient, rChan chan string, sSettings *config.ServerSettin
 		data := netfmt.Input(readData)
 		rChan <- data
 	}
-	fmt.Println("Readloop end")
 }
 
 // Loops for each new connection
 func Run(client Sclient, sSettings *config.ServerSettings) {
 	var nCurrentPlayers *uint32 = &sSettings.NCurrentPlayers
-	fmt.Printf("Client (%s) connected %s\n", client.Id, client.Socket.RemoteAddr())
+	fmt.Printf("[%s] (%s) connected\n", client.Socket.RemoteAddr(), client.Id)
 
 	rChan := make(chan string, 1)
 	defer close(rChan)
@@ -63,7 +61,7 @@ func Run(client Sclient, sSettings *config.ServerSettings) {
 				break
 			} else {
 				// Print & interpret data
-				fmt.Printf("[%s] >> %s\n", client.RemoteAddr, data) // DEBUG
+				fmt.Printf("[%s] (%s) >> %s\n", client.RemoteAddr, client.Id, data) // DEBUG
 				interpretData(client, data)
 			}
 		}
@@ -72,7 +70,7 @@ func Run(client Sclient, sSettings *config.ServerSettings) {
 	netutils.SendEotPacket(client.Socket)
 	// Then close connection
 	client.Socket.Close()
-	fmt.Printf("Client (%s) disconnected %s\n", client.Id, client.Socket.RemoteAddr())
+	fmt.Printf("[%s] (%s) disconnected\n", client.Socket.RemoteAddr(), client.Id)
 	// Decrease number of connected clients
 	*nCurrentPlayers--
 }
@@ -92,5 +90,5 @@ func sendToClient(c Sclient, rawData string) {
 
 	// Send response to client
 	c.Socket.Write(data)
-	fmt.Printf("[%s] << %s\n", c.RemoteAddr, rawData) // DEBUG
+	fmt.Printf("[%s] (%s) << %s\n", c.RemoteAddr, c.Id, rawData) // DEBUG
 }

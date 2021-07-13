@@ -7,6 +7,7 @@ import (
 
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/config"
 	"github.com/fuwu-yuan/gameserver-go/src/gs-server/sclient"
+	uuid "github.com/satori/go.uuid"
 )
 
 const CONN_TYPE = "tcp"
@@ -40,11 +41,15 @@ func StartListen(settings *config.ServerSettings) {
 		settings.NCurrentPlayers++
 
 		// Add conn to a map containing all connected clients
-		// FIXME Change client.Id must be a unique generated ID
-		client := sclient.Sclient{Id: fmt.Sprint(settings.NCurrentPlayers), Socket: conn, RemoteAddr: conn.RemoteAddr(), IsConnected: true}
+		client := sclient.Sclient{
+			Id:          uuid.NewV4().String(),
+			Socket:      conn,
+			RemoteAddr:  conn.RemoteAddr(),
+			IsConnected: true,
+		}
 		clients[settings.NCurrentPlayers] = client
 
-		// Handle connections in a new goroutine
+		// Handle the new connection in a new goroutine
 		go sclient.Run(client, settings) // TODO client.Run()
 	}
 }
