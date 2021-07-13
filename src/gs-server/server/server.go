@@ -12,11 +12,11 @@ import (
 
 const CONN_TYPE = "tcp"
 
-var clients = make(map[uint32]sclient.Sclient)
+var clients = make(map[string]sclient.Sclient)
 
 func StartListen(settings *config.ServerSettings) {
 	portString := fmt.Sprint(settings.ServerPort)
-	clients := make(map[uint32]sclient.Sclient)
+	//	clients := make(map[uint32]sclient.Sclient)
 
 	// Listen for incoming connections
 	l, err := net.Listen(CONN_TYPE, ":"+portString)
@@ -41,15 +41,17 @@ func StartListen(settings *config.ServerSettings) {
 		settings.NCurrentPlayers++
 
 		// Add conn to a map containing all connected clients
+		clientUuid := uuid.NewV4().String()
 		client := sclient.Sclient{
-			Id:          uuid.NewV4().String(),
-			Socket:      conn,
-			RemoteAddr:  conn.RemoteAddr(),
-			IsConnected: true,
+			Id:           clientUuid,
+			Socket:       conn,
+			RemoteAddr:   conn.RemoteAddr(),
+			IsConnected:  true,
+			PlayerNumber: settings.NCurrentPlayers,
 		}
-		clients[settings.NCurrentPlayers] = client
+		clients[clientUuid] = client
 
 		// Handle the new connection in a new goroutine
-		go sclient.Run(client, settings) // TODO client.Run()
+		go sclient.Run(client, settings, clients) // TODO client.Run()
 	}
 }
