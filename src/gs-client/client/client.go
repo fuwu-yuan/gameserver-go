@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/fuwu-yuan/gameserver-go/src/netfmt"
 	"github.com/fuwu-yuan/gameserver-go/src/netutils"
@@ -14,6 +15,7 @@ const (
 	CONN_TYPE = "tcp"
 	EXT       = 3
 	EOT       = 4
+	NL        = 10
 )
 
 const (
@@ -21,6 +23,11 @@ const (
 	NACK       = "NACK"
 	DISCONNECT = "DISCONNECT"
 )
+
+type client struct {
+	Socket     net.Conn
+	RemoteAddr net.Addr
+}
 
 func main() {
 	// Checking program arguments
@@ -46,36 +53,84 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Creating reader to read user input
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		rawLine, _ := reader.ReadString('\n')
-		writeData := netfmt.Output(rawLine)
-		_, err = conn.Write(writeData)
-		if err != nil {
-			fmt.Println("Write to server failed:", err.Error())
-			os.Exit(1)
-		}
+	// TODO handle SIGINT
 
-		// Read server response until ETX (End of text)
-		readData, err := bufio.NewReader(conn).ReadString(EXT)
-		if err != nil {
-			fmt.Println("Error read: ", err.Error())
-			return
-		}
-
-		reply := netfmt.Input(readData)
-
-		// Handle disconnect if the first byte of a packet is EOT
-		if len(reply) > 0 && []byte(reply)[0] == EOT {
-			netutils.SendEotPacket(conn)
-			fmt.Println("Received a disconnect, closing connection ...") // DEBUG
-			break
-		} else {
-			// Print & interpret data
-			fmt.Printf(">> %s\n", reply)
-		}
+	client := client{
+		Socket:     conn,
+		RemoteAddr: conn.RemoteAddr(),
 	}
+
+	run(client)
+
 	conn.Close()
 	fmt.Printf("Connection to %s:%s closed", serverAddr, serverPort)
+}
+
+func readUserInputLoop(userInputChan chan string) {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		// Read data until NL (New Line: \n)
+		readData, _ := reader.ReadString(NL)
+
+		data := strings.ReplaceAll(readData, "\n", "")
+		userInputChan <- data
+	}
+}
+
+func readServerResponseLoop(conn net.Conn, serverResponseChan chan string) {
+	reader := bufio.NewReader(conn)
+
+	for {
+		// Read data until ETX (End of text)
+		readData, err := reader.ReadString(EXT)
+		if err != nil {
+			// Error on read: EOF -> server ctrl-Ced
+			break
+		}
+
+		data := netfmt.Input(readData)
+		serverResponseChan <- data
+	}
+}
+
+// Loops for each new connection
+func run(client client) {
+	userInputChan := make(chan string, 1)
+	serverResponseChan := make(chan string, 1)
+	defer close(userInputChan)
+	defer close(serverResponseChan)
+
+	// Read user input loop
+	go readUserInputLoop(userInputChan)
+	// Read server response loop
+	go readServerResponseLoop(client.Socket, serverResponseChan)
+
+	// Interpret data and write loop
+	for {
+		if len(userInputChan) > 0 {
+			data := <-userInputChan
+
+			// Print & interpret data
+			fmt.Printf("[%s] << %s\n", client.RemoteAddr, data) // DEBUG
+			byteData := []byte(netfmt.Output(data))
+			client.Socket.Write(byteData)
+		}
+		if len(serverResponseChan) > 0 {
+			data := <-serverResponseChan
+
+			// Handle disconnect if the first byte of a packet is EOT
+			if len(data) > 0 && []byte(data)[0] == EOT {
+				netutils.SendEotPacket(client.Socket)
+				fmt.Println("Received a disconnect, closing connection ...") // DEBUG
+				break
+			} else {
+				// Print & interpret data
+				fmt.Printf("[%s] >> %s\n", client.RemoteAddr, data) // DEBUG
+			}
+		}
+	}
+
+	// // If out of the loop, acknowledge disconnection by sending EOT
+	// netutils.SendEotPacket(client.Socket)
 }
