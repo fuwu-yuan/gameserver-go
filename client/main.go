@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fuwu-yuan/gameserver-go/src/netfmt"
-	"github.com/fuwu-yuan/gameserver-go/src/netutils"
+	"github.com/fuwu-yuan/gameserver-go/netfmt"
+	"github.com/fuwu-yuan/gameserver-go/netutils"
 )
 
 const (
