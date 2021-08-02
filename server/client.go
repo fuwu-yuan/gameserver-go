@@ -40,11 +40,11 @@ func NewClient(conn net.Conn, playerNumber uint, broadcastChan chan Message) *Cl
 
 func (c *Client) Start() {
 	fmt.Printf("[%s] (%s) connected\n", c.RemoteAddr, c.ID)
-	rChan := make(chan string, 1)
-	defer close(rChan)
+	readChan := make(chan string, 1)
+	defer close(readChan)
 
 	// Read loop
-	go c.readLoop(rChan)
+	go c.readLoop(readChan)
 
 	exit := false
 	for {
@@ -52,7 +52,7 @@ func (c *Client) Start() {
 		case <-c.closeChan:
 			exit = true
 			break
-		case data := <-rChan:
+		case data := <-readChan:
 			// Handle disconnect if the first byte of a packet is EOT
 			if len(data) > 0 && []byte(data)[0] == EOT {
 				fmt.Println("Received a disconnect, closing connection ...") // DEBUG
@@ -83,23 +83,38 @@ func (c *Client) Start() {
 }
 
 func (c *Client) Close() {
-	fmt.Printf("[%s] (%s) closing client...\n", c.RemoteAddr, c.ID) // DEBUG
+	// fmt.Printf("[%s] (%s) closing client...\n", c.RemoteAddr, c.ID) // DEBUG
 	c.closeChan <- true
 }
 
-func (c Client) readLoop(rChan chan string) {
+func (c Client) readLoop(readChan chan string) {
 	reader := bufio.NewReader(c.Socket)
 
-	select {
-	case <-c.closeChan:
-		break
-	default:
-		readData, err := reader.ReadString(EXT)
-		if err != nil {
+	exit := false
+	for {
+		select {
+		case <-c.closeChan:
+			exit = true
+			break
+		default:
+			readData, err := reader.ReadString(EXT)
+			if err != nil {
+				// fmt.Printf("Err: %s\n", err.Error()) // DEBUG
+				exit = true
+				break
+			}
+
+			data := netfmt.Input(readData)
+			readChan <- data
+		}
+		if exit {
 			break
 		}
-
-		data := netfmt.Input(readData)
-		rChan <- data
 	}
+	/*
+	 * If the distant client close its socket without notice, this loop will
+	 * end due to the ReadString returning an EOF error therefore we need to
+	 * manually close its server-side socket
+	 */
+	c.Close()
 }

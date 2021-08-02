@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/fuwu-yuan/gameserver-go/infrastructure/config"
 	"github.com/fuwu-yuan/gameserver-go/netfmt"
@@ -39,7 +40,7 @@ func NewServer(settings *config.ServerSettings) (*Server, error) {
 		port:            settings.ServerPort,
 		listener:        listener,
 		clients:         make(map[string]*Client),
-		broadcastChan:   make(chan Message, 5),
+		broadcastChan:   make(chan Message),
 		Name:            settings.ServerName,
 		Description:     settings.ServerDescription,
 		GameName:        settings.GameName,
@@ -58,6 +59,11 @@ func (s *Server) Start() error {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			if _, ok := err.(*net.OpError); ok {
+				/*
+				 * If the server is stoping, this gives the time for all clients to
+				 * disconnect properly
+				 */
+				time.Sleep(time.Second * 3)
 				return nil
 			}
 			return err
@@ -79,28 +85,30 @@ func (s *Server) Start() error {
 func (s *Server) RemoveClient(client *Client) {
 	s.NCurrentPlayers--
 	delete(s.clients, client.ID)
+	fmt.Printf("[%s] (%s) removing client...\n", client.RemoteAddr, client.ID) // DEBUG
 }
 
 func (s *Server) Stop() {
 	for _, client := range s.clients {
 		client.Close()
-		fmt.Printf("[%s] (%s) removing client...\n", client.RemoteAddr, client.ID) // DEBUG
 		s.RemoveClient(client)
 	}
-	fmt.Println("closing server broadcast channel...") // DEBUG
+	// fmt.Println("closing server broadcast channel...") // DEBUG
 	close(s.broadcastChan)
-	fmt.Println("closing server listener...") // DEBUG
+	// fmt.Println("closing server listener...") // DEBUG
 	s.listener.Close()
 }
 
 func (s Server) broadcast() {
-	select {
-	case msg := <-s.broadcastChan:
-		for _, client := range s.clients {
-			// Build the response with EXT as the last byte
-			// Send response to client
-			client.Socket.Write(netfmt.Output(msg.Message))
-			fmt.Printf("[%s] (%s) << %s\n", client.RemoteAddr, client.ID, msg.Message) // DEBUG
+	for {
+		select {
+		case msg := <-s.broadcastChan:
+			for _, client := range s.clients {
+				// Build the response with EXT as the last byte
+				// Send response to client
+				client.Socket.Write(netfmt.Output(msg.Message))
+				fmt.Printf("[%s] (%s) << %s\n", client.RemoteAddr, client.ID, msg.Message) // DEBUG
+			}
 		}
 	}
 }

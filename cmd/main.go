@@ -17,28 +17,28 @@ func main() {
 		fmt.Printf("CheckArguments Error: %s\n", err.Error())
 		os.Exit(-1)
 	}
-	srv, err := server.NewServer(settings)
+	s, err := server.NewServer(settings)
 	if err != nil {
 		fmt.Printf("NewServer Error: %s\n", err.Error())
 		os.Exit(-1)
 	}
 
 	// Signal handler initialize
-	go handleSignals(srv)
+	go handleSignals(s)
 
 	// Start the server
-	if err := srv.Start(); err != nil {
+	if err := s.Start(); err != nil {
 		fmt.Printf("Server.Start Error: %s\n", err.Error())
 		os.Exit(-1)
 	}
 }
 
-func handleSignals(srv *server.Server) {
+func handleSignals(s *server.Server) {
 	signalChannel := make(chan os.Signal, 3)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGUSR1)
 
 	<-signalChannel
 	// Handle SIGINT | SIGTERM | SIGUSR1
 	fmt.Println("Received a shutdown request, initiating shutdown sequence ...")
-	srv.Stop()
+	s.Stop()
 }
