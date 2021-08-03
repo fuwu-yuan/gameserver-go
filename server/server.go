@@ -91,24 +91,25 @@ func (s *Server) RemoveClient(client *Client) {
 func (s *Server) Stop() {
 	for _, client := range s.clients {
 		client.Close()
-		s.RemoveClient(client)
 	}
-	// fmt.Println("closing server broadcast channel...") // DEBUG
 	close(s.broadcastChan)
-	// fmt.Println("closing server listener...") // DEBUG
 	s.listener.Close()
 }
 
 func (s Server) broadcast() {
 	for {
-		select {
-		case msg := <-s.broadcastChan:
-			for _, client := range s.clients {
-				// Build the response with EXT as the last byte
-				// Send response to client
-				client.Socket.Write(netfmt.Output(msg.Message))
-				fmt.Printf("[%s] (%s) << %s\n", client.RemoteAddr, client.ID, msg.Message) // DEBUG
-			}
+		msg, ok := <-s.broadcastChan
+
+		// If the broadcast channel has been closed there is no need to continue to loop
+		if !ok {
+			return
+		}
+		for _, client := range s.clients {
+			fmt.Println("BROADCAST CLIENTS FOR START")
+			// Build the response with EXT as the last byte and send it to the client
+			client.Socket.Write(netfmt.Output(msg.Message))
+			fmt.Println([]byte(msg.Message))
+			fmt.Printf("[%s] (%s) << %s\n", client.RemoteAddr, client.ID, msg.Message) // DEBUG
 		}
 	}
 }

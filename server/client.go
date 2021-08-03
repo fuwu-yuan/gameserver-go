@@ -51,19 +51,18 @@ func (c *Client) Start() {
 		select {
 		case <-c.closeChan:
 			exit = true
-			break
 		case data := <-readChan:
 			// Handle disconnect if the first byte of a packet is EOT
 			if len(data) > 0 && []byte(data)[0] == EOT {
 				fmt.Println("Received a disconnect, closing connection ...") // DEBUG
 				exit = true
-				break
-			}
-			// Print & interpret data
-			fmt.Printf("[%s] (%s) >> %s\n", c.RemoteAddr, c.ID, data) // DEBUG
-			c.broadcastChan <- Message{
-				SenderID: c.ID,
-				Message:  data,
+			} else {
+				// Print & interpret data
+				fmt.Printf("[%s] (%s) >> %s\n", c.RemoteAddr, c.ID, data) // DEBUG
+				c.broadcastChan <- Message{
+					SenderID: c.ID,
+					Message:  data,
+				}
 			}
 		}
 		if exit {
@@ -83,7 +82,6 @@ func (c *Client) Start() {
 }
 
 func (c *Client) Close() {
-	// fmt.Printf("[%s] (%s) closing client...\n", c.RemoteAddr, c.ID) // DEBUG
 	c.closeChan <- true
 }
 
@@ -95,17 +93,14 @@ func (c Client) readLoop(readChan chan string) {
 		select {
 		case <-c.closeChan:
 			exit = true
-			break
 		default:
 			readData, err := reader.ReadString(EXT)
 			if err != nil {
-				// fmt.Printf("Err: %s\n", err.Error()) // DEBUG
 				exit = true
-				break
+			} else {
+				data := netfmt.Input(readData)
+				readChan <- data
 			}
-
-			data := netfmt.Input(readData)
-			readChan <- data
 		}
 		if exit {
 			break
