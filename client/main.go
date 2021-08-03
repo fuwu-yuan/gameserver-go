@@ -60,74 +60,106 @@ func main() {
 		RemoteAddr: conn.RemoteAddr(),
 	}
 
-	run(client)
+	client.Run()
 
 	conn.Close()
 	fmt.Printf("Connection to %s:%s closed", serverAddr, serverPort)
 }
 
-func readUserInputLoop(userInputChan chan string) {
+func (c *client) readUserInputLoop(userInputChan chan string) {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		// Read data until NL (New Line: \n)
-		readData, _ := reader.ReadString(NL)
+		readData, err := reader.ReadString(NL)
+		if err != nil {
+			fmt.Println("Err: ", err.Error())
+		}
 
 		data := strings.ReplaceAll(readData, "\n", "")
 		userInputChan <- data
 	}
 }
 
-func readServerResponseLoop(conn net.Conn, serverResponseChan chan string) {
-	reader := bufio.NewReader(conn)
+func (c *client) readServerResponseLoop(serverResponseChan chan string) {
+	reader := bufio.NewReader(c.Socket)
+	serverResponseCloseChan := make(chan bool, 1)
+	defer close(serverResponseCloseChan)
 
+	exit := false
 	for {
-		// Read data until ETX (End of text)
-		readData, err := reader.ReadString(EXT)
-		if err != nil {
-			// Error on read: EOF -> server ctrl-Ced
+		select {
+		case <-serverResponseCloseChan:
+			exit = true
+		default:
+			// Read data until ETX (End of text)
+			readData, err := reader.ReadString(EXT)
+			if err != nil {
+				// Error on read: EOF -> server ctrl-Ced
+				serverResponseCloseChan <- true
+				exit = true
+				break
+			}
+
+			data := netfmt.Input(readData)
+			serverResponseChan <- data
+		}
+		if exit {
 			break
 		}
-
-		data := netfmt.Input(readData)
-		serverResponseChan <- data
 	}
 }
 
 // Loops for each new connection
-func run(client client) {
+func (c *client) Run() {
 	userInputChan := make(chan string, 1)
+
 	serverResponseChan := make(chan string, 1)
+
+	mainLoopCloseChan := make(chan bool, 1)
+
 	defer close(userInputChan)
 	defer close(serverResponseChan)
+	defer close(mainLoopCloseChan)
 
 	// Read user input loop
-	go readUserInputLoop(userInputChan)
+	go c.readUserInputLoop(userInputChan)
 	// Read server response loop
-	go readServerResponseLoop(client.Socket, serverResponseChan)
+	go c.readServerResponseLoop(serverResponseChan)
 
+	exit := false
 	// Interpret data and write loop
 	for {
-		if len(userInputChan) > 0 {
-			data := <-userInputChan
+		select {
+		case <-mainLoopCloseChan:
+			exit = true
+		case data := <-userInputChan:
+			// Interpret data
 
-			// Print & interpret data
-			fmt.Printf("[%s] << %s\n", client.RemoteAddr, data) // DEBUG
-			byteData := []byte(netfmt.Output(data))
-			client.Socket.Write(byteData)
-		}
-		if len(serverResponseChan) > 0 {
-			data := <-serverResponseChan
+			// Simulate "proper exit"
+			if data == "exit" {
+				netutils.SendEotPacket(c.Socket)
+			} else {
+				c.Socket.Write(netfmt.Output(data))
 
+				// Print data
+				fmt.Printf("[%s] << %s\n", c.RemoteAddr, data) // DEBUG
+			}
+
+		case data := <-serverResponseChan:
 			// Handle disconnect if the first byte of a packet is EOT
 			if len(data) > 0 && []byte(data)[0] == EOT {
-				netutils.SendEotPacket(client.Socket)
+				// netutils.SendEotPacket(c.Socket)
 				fmt.Println("Received a disconnect, closing connection ...") // DEBUG
-				break
+				mainLoopCloseChan <- true
+				exit = true
 			} else {
 				// Print & interpret data
-				fmt.Printf("[%s] >> %s\n", client.RemoteAddr, data) // DEBUG
+				fmt.Printf("[%s] >> %s\n", c.RemoteAddr, data) // DEBUG
 			}
+		}
+		if exit {
+			break
 		}
 	}
 
