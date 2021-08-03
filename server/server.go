@@ -105,10 +105,8 @@ func (s Server) broadcast() {
 			return
 		}
 		for _, client := range s.clients {
-			fmt.Println("BROADCAST CLIENTS FOR START")
 			// Build the response with EXT as the last byte and send it to the client
 			client.Socket.Write(netfmt.Output(msg.Message))
-			fmt.Println([]byte(msg.Message))
 			fmt.Printf("[%s] (%s) << %s\n", client.RemoteAddr, client.ID, msg.Message) // DEBUG
 		}
 	}
