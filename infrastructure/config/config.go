@@ -56,6 +56,6 @@ func CheckArguments() (*ServerSettings, error) {
 // serverUsage prints the usage
 func serverUsage() {
 	fmt.Println("Usage:")
-	fmt.Println("./gs-server <port> <server_name> <server_description> <game_name> <game_version> <max_number_of_players>")
+	fmt.Println("./server <port> <server_name> <server_description> <game_name> <game_version> <max_number_of_players>")
 	fmt.Println("                                 [    IS OPTIONAL   ]")
 }
